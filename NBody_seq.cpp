@@ -92,8 +92,8 @@ void sort(unsigned int* x, int lengthOfX, int* & index) {
     sortHelper(x, 0, lengthOfX-1, index);
     //(1) parallel sorting
     //merge sort
-    
 }
+
 
 class Node {
 public:
@@ -267,7 +267,7 @@ class NBody {
 public:
     double* points_x; //x coordinate of points, index indicates point id
     double* points_y; //y coordinate of points, index indicates point id
-    double* points_d;
+    double* points_d; //density of points, index indicates point id
     int numOfPoint; //total number of points
     int maxLevel;
     double* ans;
@@ -438,8 +438,23 @@ public:
     // fill in the vectors points_x, points_y, points_d in tree;
     }
     
-    void average() {
+    void average(int numOfNodes) {
     //(3) fill in ave_x, ave_y, ave_d in tree
+    
+    // Find subtree size for every node
+    int subSize = findSubSize(NodeInArray)
+
+    // Build euler tour
+    // I: rank of the first incidence of node i in Euler Tour
+    // O: rank of the second incidence of node i in Euler Tour
+    // R: results
+    int* I = new int[numOfNodes];
+    int* O = new int[numOfNodes];
+    int* R = new int[numOfNodes];
+
+    int eularTour = new int[numOfNodes*2];
+
+
     }
                  
     void evaluate(double x, double y) {
@@ -448,7 +463,19 @@ public:
     }
 };
 
-
+// find subsize of given node i in the tree
+int subSize(NodyInArray *tree, int i){
+    if (tree[i].leaf){
+        return 0;
+    }
+    bool notleaf = True;
+    int current = i;
+    while(notleaf){
+        current = tree[current].childrenIndex[3];
+        notleaf = current.leaf;
+    }
+    return current - i;
+};
 
 int main(int argc, char* argv[])
 {   string file = "/Users/xinyangyi/test.txt";
