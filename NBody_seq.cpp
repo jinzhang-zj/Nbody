@@ -442,17 +442,31 @@ public:
     //(3) fill in ave_x, ave_y, ave_d in tree
     
     // Find subtree size for every node
-    int subSize = findSubSize(NodeInArray)
+    // subS: store size of subtree of every node
+    int* subS = new int[numOfNodes];
+    for (int i=0; i<numOfNodes; i++){
+        subS[i] = subSize(tree, i);
+    }
 
     // Build euler tour
     // I: rank of the first incidence of node i in Euler Tour
     // O: rank of the second incidence of node i in Euler Tour
-    // R: results
+    // L: morton level of node i
     int* I = new int[numOfNodes];
     int* O = new int[numOfNodes];
+    int* L = new int[numOfNodes];
+    for (int i=0; i<numOfNodes; i++){
+        L[i] = tree[i].level;
+        I[i] = tree[i].mortonId * 2 - L[i];
+        O[i] = I[i] + 2*subS[i];
+    }
+    
+    // use prefix sum to calculate and store average results.
+    // R: results
     int* R = new int[numOfNodes];
+    int* tmpS = new int[numOfNodes*2];
+    
 
-    int eularTour = new int[numOfNodes*2];
 
 
     }
