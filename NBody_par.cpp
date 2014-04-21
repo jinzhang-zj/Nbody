@@ -233,6 +233,69 @@ public:
     }
 };
 
+//====================helper function for tree average===========================
+// sequential sum of vector
+double seqVsum(vector<double> & vec){
+    double sum = 0;
+    for (int i=0; i< vec.size(); i++)
+        sum += vec[i];
+    return sum;
+};
+
+// sequential sum of product of two vector
+double seqV2sum(vector<double> & vec1, vector<double> & vec2){
+    double sum = 0;
+    for (int i=0; i<vec1.size(); i++)
+        sum += vec1[i]*vec2[i];
+    return sum;
+};
+
+// parallel scan for double array
+double* parScan(double* array, int size){
+    if (size == 1){
+        return array;
+    }
+
+    double lastelement = array[size-1];
+    int r=1;
+    int t=(int) ceil(size*1.0/r);
+    
+    do{
+        #pragma omp parallel for
+        for (int i=1; i<t-1; i+=2){
+            array[(i+1)*r-1] += array[i*r-1];
+        }
+        r*=2;
+        t=(int)ceil(size*1.0/r);
+    }while(t>2);
+
+    do{
+        t=(int)ceil(size*1.0/r);
+        #pragma omp parallel for
+        for (int i=2; i<t-1; i+=2){
+            array[(i+1)*r-1] += array[i*r-1];
+        }
+        r/=2;
+    }while(r>=1);
+
+    array[size - 1] = array[size - 2] + lastelement;
+    return array;
+};
+
+// find subsize of given node i in the tree
+int subSize(NodeInArray *tree, int i){
+    if (tree[i].leaf){
+        return 0;
+    }
+    bool notleaf = true;
+    int current = i;
+    while(notleaf){
+        current = tree[current].childrenIndex[3];
+        notleaf = !tree[current].leaf;
+    }
+    return current - i;
+};
+//====================helper function for tree average===========================
 
 //merge two node arrays and delete the original ones. The length of new array is written int *L
 NodeInArray *merge(NodeInArray* s1, NodeInArray* s2, int L1, int L2, int* L ) {
@@ -446,8 +509,91 @@ public:
     // fill in the vectors points_x, points_y, points_d in tree;
     }
     
-    void average() {
+    void average(int numOfNodes) {
     //(3) fill in ave_x, ave_y, ave_d in tree
+
+	// Find subtree size for every node
+	// subS: store size of subtree of every node
+	int* subS = new int[numOfNodes];
+	#pragma omp parallel for
+	for (int i=0; i<numOfNodes; i++)
+		subS[i] = subSize(tree, i);
+
+	// Build Euler tour
+	// I: rank of the first incidence of node in Euler tour
+	// O: rank of the last incidence of node in Euler tour
+        int* I = new int[numOfNodes];
+        int* O = new int[numOfNodes];
+
+	#pragma omp parallel for
+        for (int i=0; i<numOfNodes; i++){
+            I[i] = tree[i].mortonId * 2 - tree[i].level;
+            O[i] = I[i] + 2*subS[i];
+        }
+
+        // average all points within a node
+        // NX: averaged x for all points in a node
+        // NY: averaged y for all points in a node
+        // ND: sum of d for all points in node
+        double* NX = new double[numOfNodes]; 
+        double* NY = new double[numOfNodes]; 
+        double* ND = new double[numOfNodes];
+	#pragma omp parallel for
+        for (int i=0; i<numOfNodes; i++){
+            ND[i] = seqVsum(tree[i].points_d);
+            NX[i] = seqV2sum(tree[i].points_x, tree[i].points_d)/ND[i];
+            NY[i] = seqV2sum(tree[i].points_y, tree[i].points_d)/ND[i];
+        }
+
+        // use prefix sum to calculate and store average results.
+        // SX: store data (x coordinate) to scan
+        // SY: store data (x coordinate) to scan
+        // SD: store data (d density) to scan
+        double* SX = new double[numOfNodes*2];
+        double* SY = new double[numOfNodes*2];
+        double* SD = new double[numOfNodes*2];
+	
+	#pragma omp parallel for
+        for (int i=0; i<numOfNodes*2; i++){
+            SX[i] = 0;
+            SY[i] = 0;
+            SD[i] = 0;
+        }
+
+	#pragma omp parallel for
+        for (int i=0; i<numOfNodes; i++){
+            SX[I[i]] = NX[i]*ND[i];
+            SY[I[i]] = NY[i]*ND[i];
+            SD[I[i]] = ND[i];
+        }
+
+	// parallel scan
+        SX = parScan(SX,numOfNodes*2);
+        SY = parScan(SY,numOfNodes*2);
+        SD = parScan(SD,numOfNodes*2);
+
+	#pragma omp parallel for
+        for (int i=0; i<numOfNodes; i++){
+            tree[i].ave_d = SD[O[i]] - SD[I[i]] + ND[i];
+            if (!tree[i].ave_d){
+                tree[i].ave_x = 0;
+                tree[i].ave_y = 0;
+            }else{
+                tree[i].ave_x = (SX[O[i]] - SX[I[i]] + NX[i]*ND[i])/tree[i].ave_d;
+                tree[i].ave_y = (SY[O[i]] - SY[I[i]] + NY[i]*ND[i])/tree[i].ave_d;
+            }
+        }
+
+	// cleaning up
+	delete [] subS;
+	delete [] I;
+	delete [] O;
+	delete [] NX;
+	delete [] NY;
+	delete [] ND;
+	delete [] SX;
+	delete [] SY;
+	delete [] SD;	
     }
                  
     void evaluate(double x, double y) {
@@ -456,6 +602,31 @@ public:
     }
 };
 
+// testing function on parallel scan
+void testParscan(){
+    // test on parallel scan
+    double* t1 = new double[1];
+    t1[0] = 1;
+
+    double* t2 = new double[5];
+    t2[0] = 1;
+    t2[1] = 2;
+    t2[2] = 3;
+    t2[3] = 4;
+    t2[4] = 5;
+    
+    t1 = parScan(t1,1);
+    t2 = parScan(t2,5);
+    
+    for (int i=0; i<1; i++)
+	cout << t1[i] << endl;
+
+    for (int i=0; i<5; i++)
+	cout << t2[i] << endl;
+
+    delete [] t1;
+    delete [] t2;
+}
 
 
 int main(int argc, char* argv[])
@@ -463,4 +634,6 @@ int main(int argc, char* argv[])
     NBody* sol  = new NBody(file);
     sol->constructTree();
     cout<<"Successfully constructing a tree with "<<sol->numOfNode<<" nodes"<<endl;
+    testParscan();
+
 }
