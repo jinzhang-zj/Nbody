@@ -495,7 +495,7 @@ public:
         int* I = new int[numOfNodes];
         int* O = new int[numOfNodes];
         for (int i=0; i<numOfNodes; i++){
-            I[i] = tree[i].mortonId * 2 - tree[i].level;
+            I[i] = i * 2 - tree[i].level;
             O[i] = I[i] + 2*subS[i];
         }
     
@@ -569,4 +569,5 @@ int main(int argc, char* argv[])
     NBody* sol  = new NBody(file);
     sol->constructTree();
     cout<<"Successfully constructing a tree with "<<sol->numOfNode<<" nodes"<<endl;
+    cout << interleave (5,6) << endl;
 }
