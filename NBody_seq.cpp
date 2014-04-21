@@ -233,6 +233,47 @@ public:
     }
 };
 
+//====================helper function for tree average===========================
+// sequential sum of vector
+double seqVsum(vector<double> & vec){
+    double sum = 0;
+    for (int i=0; i< vec.size(); i++)
+        sum += vec[i];
+    return sum;
+};
+
+// sequential sum of product of two vector
+double seqV2sum(vector<double> & vec1, vector<double> & vec2){
+    double sum = 0;
+    for (int i=0; i<vec1.size(); i++)
+        sum += vec1[i]*vec2[i];
+    return sum;
+};
+
+// sequential scan for int array
+double* seqScan(double* array, int size){
+    double* result = new double[size];
+    result[0] = array[0];
+    for (int i=1; i<size; i++){
+        result[i] += array[i] + result[i-1];
+    }
+    return result;
+};
+
+// find subsize of given node i in the tree
+int subSize(NodeInArray *tree, int i){
+    if (tree[i].leaf){
+        return 0;
+    }
+    bool notleaf = true;
+    int current = i;
+    while(notleaf){
+        current = tree[current].childrenIndex[3];
+        notleaf = !tree[current].leaf;
+    }
+    return current - i;
+};
+//====================helper function for tree average===========================
 
 //merge two node arrays and delete the original ones. The length of new array is written int *L
 NodeInArray *merge(NodeInArray* s1, NodeInArray* s2, int L1, int L2, int* L ) {
@@ -441,54 +482,86 @@ public:
     void average(int numOfNodes) {
     //(3) fill in ave_x, ave_y, ave_d in tree
     
-    // Find subtree size for every node
-    // subS: store size of subtree of every node
-    int* subS = new int[numOfNodes];
-    for (int i=0; i<numOfNodes; i++){
-        subS[i] = subSize(tree, i);
-    }
+        // Find subtree size for every node
+        // subS: store size of subtree of every node
+        int* subS = new int[numOfNodes];
+        for (int i=0; i<numOfNodes; i++){
+            subS[i] = subSize(tree, i);
+        }
 
-    // Build euler tour
-    // I: rank of the first incidence of node i in Euler Tour
-    // O: rank of the second incidence of node i in Euler Tour
-    // L: morton level of node i
-    int* I = new int[numOfNodes];
-    int* O = new int[numOfNodes];
-    int* L = new int[numOfNodes];
-    for (int i=0; i<numOfNodes; i++){
-        L[i] = tree[i].level;
-        I[i] = tree[i].mortonId * 2 - L[i];
-        O[i] = I[i] + 2*subS[i];
-    }
+        // Build euler tour
+        // I: rank of the first incidence of node i in Euler Tour
+        // O: rank of the second incidence of node i in Euler Tour
+        int* I = new int[numOfNodes];
+        int* O = new int[numOfNodes];
+        for (int i=0; i<numOfNodes; i++){
+            I[i] = tree[i].mortonId * 2 - tree[i].level;
+            O[i] = I[i] + 2*subS[i];
+        }
     
-    // use prefix sum to calculate and store average results.
-    // R: results
-    int* R = new int[numOfNodes];
-    int* tmpS = new int[numOfNodes*2];
-    
+        // average all points within a node
+        // NX: averaged x for all points in a node
+        // NY: averaged y for all points in a node
+        // ND: sum of d for all points in node
+        double* ND = new double[numOfNodes];
+        double* NX = new double[numOfNodes]; 
+        double* NY = new double[numOfNodes]; 
+        for (int i=0; i<numOfNodes; i++){
+            ND[i] = seqVsum(tree[i].points_d);
+            NX[i] = seqV2sum(tree[i].points_x, tree[i].points_d)/ND[i];
+            NY[i] = seqV2sum(tree[i].points_y, tree[i].points_d)/ND[i];
+        }
 
+        // use prefix sum to calculate and store average results.
+        // SX: store data (x coordinate) to scan
+        // SY: store data (x coordinate) to scan
+        // SD: store data (d density) to scan
+        double* SX = new double[numOfNodes*2];
+        double* SY = new double[numOfNodes*2];
+        double* SD = new double[numOfNodes*2];
+        for (int i=0; i<numOfNodes*2; i++){
+            SX[i] = 0;
+            SY[i] = 0;
+            SD[i] = 0;
+        }
 
+        for (int i=0; i<numOfNodes; i++){
+            SX[I[i]] = NX[i]*ND[i];
+            SY[I[i]] = NY[i]*ND[i];
+            SD[I[i]] = ND[i];
+        }
 
+        SX = seqScan(SX,numOfNodes*2);
+        SY = seqScan(SY,numOfNodes*2);
+        SD = seqScan(SD,numOfNodes*2);
+
+        for (int i=0; i<numOfNodes; i++){
+            tree[i].ave_d = SD[O[i]] - SD[I[i]] + ND[i];
+            if (!tree[i].ave_d){
+                tree[i].ave_x = 0;
+                tree[i].ave_y = 0;
+            }else{
+                tree[i].ave_x = (SX[O[i]] - SX[I[i]] + NX[i]*ND[i])/tree[i].ave_d;
+                tree[i].ave_y = (SY[O[i]] - SY[I[i]] + NY[i]*ND[i])/tree[i].ave_d;
+            }
+        }
+
+	// cleaning up
+	delete [] subS;
+	delete [] I;
+	delete [] O;
+	delete [] NX;
+	delete [] NY;
+	delete [] ND;
+	delete [] SX;
+	delete [] SY;
+	delete [] SD;
     }
                  
     void evaluate(double x, double y) {
     //(4)
     //implement evaluate function based on tree
     }
-};
-
-// find subsize of given node i in the tree
-int subSize(NodyInArray *tree, int i){
-    if (tree[i].leaf){
-        return 0;
-    }
-    bool notleaf = True;
-    int current = i;
-    while(notleaf){
-        current = tree[current].childrenIndex[3];
-        notleaf = current.leaf;
-    }
-    return current - i;
 };
 
 int main(int argc, char* argv[])
