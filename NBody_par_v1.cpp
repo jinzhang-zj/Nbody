@@ -2,8 +2,6 @@
 //  main.cpp
 //  test
 //
-//  Created by Xinyang Yi on 2/19/14.
-//  Copyright (c) 2014 Xinyang Yi. All rights reserved.
 //
 
 #include<stdio.h>
@@ -17,7 +15,6 @@
 #define PI 3.1415926
 
 using namespace std;
-
 
 //interleave two integer x, y
 unsigned int interleave(unsigned int x, unsigned int y) {
@@ -41,48 +38,105 @@ unsigned int interleave(unsigned int x, unsigned int y) {
 
 //attach level to mortonId, return the score of node
 int attach(int mortonId, int level, int maxLevel) {
-    return mortonId * pow(2,(int)log2((double)maxLevel)+1) + level;
+    return mortonId * pow(2,(int)log2((double)maxLevel) + 1) + level;
 }
 
-//sequential merge sort
+void subMerge(unsigned int* x, int *index, unsigned int* temp, int* tempIndex, int s1, int e1, int s2, int e2, int offset) {
+	int j1, j2;
+	j1 = s1;
+	j2 = s2;
+	int length = 0;
+	length = e1 - s1 + 1 + e2 - s2 + 1;
+	for(int i = offset; i < offset + length; i++) {
+	      if(j1 <= e1 && j2 <= e2) {
+		 if(x[j1] < x[j2]) {
+			temp[i] = x[j1];
+			tempIndex[i] = index[j1++];
+		}
+		else {
+			temp[i] = x[j2];
+			tempIndex[i] = index[j2++];	
+		}
+	      }
+	     else if(j1 <= e1) {
+		        temp[i] = x[j1];
+			tempIndex[i] = index[j1++];	
+	     }
+	     else {
+			temp[i] = x[j2];
+			tempIndex[i] = index[j2++];
+	     }
+	}
+}
+
+
+int bsearch(unsigned int v, unsigned int* x, int s, int e) {
+	int i = s, j = e;
+	int mid = (i+j)/2;
+	while(i < j) {
+		mid = (i+j)/2;
+		if(x[mid] == v) return mid;
+		if(x[mid] < v) i = mid + 1;
+		else j = mid - 1;
+	}
+	return mid;
+}
+
+//merge
+void merge(unsigned int* x, int startIndex, int endIndex, int mid, int* index) {
+    unsigned int* temp = new unsigned int[endIndex - startIndex + 1];
+    int* tempIndex = new int[endIndex - startIndex + 1];    
+    int j1, j2;
+    j1 = startIndex;
+    j2 = mid+1;
+    int p = omp_get_num_threads();
+
+    if(startIndex - endIndex + 1 < 2*p) 
+      subMerge(x,index, temp, tempIndex, startIndex, mid, mid+1, endIndex, 0);
+    else {
+	int* marker = new int[p+1];
+        int* marker1 = new int[p+1];
+	int* offset = new int[p]; 
+	#pragma omp parallel for
+        for(int k = 0; k < p; k++) 
+		marker[k] = (mid - startIndex + 1)/p*k;
+	marker[p] = mid+1;
+	marker1[0] = mid+1;
+	marker1[p] = endIndex + 1;
+	#pragma omp parallel for 
+	for(int k = 1; k <= p-1; k++) {
+		marker1[k] = bsearch(x[marker[k]], x, mid+1, endIndex);
+	}
+	offset[0] = 0;
+	for(int k = 1; k < p; k++)
+		offset[k] = offset[k-1] + marker[k] - marker[k-1] + marker1[k] - marker1[k-1];
+	#pragma omp parallel for
+	for(int k = 0; k < p; k++)
+		subMerge(x, index, temp, tempIndex, marker[k], marker[k+1]-1, marker1[k], marker1[k+1]-1, offset[k]); 
+    	delete[] marker;
+	delete[] marker1;
+	delete[] offset;
+    }
+    #pragma omp parallel for
+    for(int i = 0; i < endIndex - startIndex + 1; i++) {
+         x[i+startIndex] = temp[i];
+         index[i+startIndex] = tempIndex[i];
+    }
+    delete[] temp;
+    delete[] tempIndex;
+}
+
+
+//parallel merge sort
 void sortHelper(unsigned int* x, int startIndex, int endIndex, int * index) {
     if(startIndex >= endIndex) return;
     int mid = (startIndex + endIndex)/2;
     sortHelper(x, startIndex, mid, index);
     sortHelper(x, mid+1, endIndex, index);
     //merge
-    int* temp = new int[endIndex - startIndex + 1];
-    int* tempIndex = new int[endIndex - startIndex + 1];
-    int j1, j2;
-    j1 = startIndex;
-    j2 = mid+1;
-    for(int i = 0; i < endIndex - startIndex + 1; i++) {
-        if(j1 <= mid && j2 <= endIndex){
-            if(x[j1] < x[j2]) {
-                temp[i] = x[j1];
-                tempIndex[i] = index[j1++];
-            }
-            else {
-                temp[i] = x[j2];
-                tempIndex[i] = index[j2++];
-            }
-        }
-        else if(j1 <= mid) {
-            temp[i] = x[j1];
-            tempIndex[i] = index[j1++];
-        }
-        else {
-            temp[i] = x[j2];
-            tempIndex[i] = index[j2++];
-        }
-    }
-    for(int i = 0; i < endIndex - startIndex + 1; i++) {
-        x[i+startIndex] = temp[i];
-        index[i+startIndex] = tempIndex[i];
-    }
-    delete[] temp;
-    delete[] tempIndex;
+    merge(x, startIndex, endIndex, mid, index);
 }
+
 
 //sort integer array, index stores the index in the original array
 //e.g. x = [1,10,9] after sorting x = [1,9,10], index = [1,3,2]
@@ -90,9 +144,7 @@ void sort(unsigned int* x, int lengthOfX, int* & index) {
     index = new int[lengthOfX];
     for(int i = 0; i < lengthOfX; i++)
         index[i] = i;
-    sortHelper(x, 0, lengthOfX-1, index);
-    //(1) parallel sorting
-    //merge sort
+    sortHelper(x, 0, lengthOfX-1, index); 
 }
 
 class Node {
@@ -359,7 +411,6 @@ public:
             input >> points_d[i];
         }
     }
-
     
     void constructTree() {
         unsigned int* pointMorton = new unsigned int[numOfPoint];
@@ -663,93 +714,86 @@ public:
 	delete [] SD;	
     }
                  
-    void direct(const NodeInArray &trg,const NodeInArray &src,double *potential){
+    void direct(const double &x, const double &y, const NodeInArray &src, double &potential){
         if (!src.leaf){
-            cout<< "not a leaf. can't do direct calculation"<<endl; return;
+            cout<< "not a leaf. can't do direct calculation,please do approximation"<<endl; return;
         }
         double bufx,bufy,r;
-        for (int i=0;i<trg.pointNum;i++){
+       // for (int i=0;i<trg.pointNum;i++){
             for (int j=0;j<src.pointNum;j++){
-                bufx = trg.points_x[i]-src.points_x[j];
-                bufy = trg.points_y[i]-src.points_y[j];
+                bufx = x - src.points_x[j];
+                bufy = y - src.points_y[j];
                 r = bufx*bufx+bufy*bufy;
-                if (r>10e-36)
-                    potential[i] -= 1/4/PI*log(r)*src.points_d[j];
+                if (r>10e-100)
+                    potential -= 1.0/4.0/PI*log(r)*src.points_d[j];
             }
-        }
+        //}
     }
 
-    void approximate(const NodeInArray &trg,const  NodeInArray &src,double *potential){
+    void approximate(const double &x, const double &y, const NodeInArray &src, double &potential){
         double bufx,bufy,r;
-        for (int i=0;i<trg.pointNum;i++){
-            bufx = trg.points_x[i]-src.ave_x;
-            bufy = trg.points_y[i]-src.ave_y;
+       // for (int i=0;i<trg.pointNum;i++){
+            bufx = x - src.ave_x;
+            bufy = y - src.ave_y;
             r = bufx*bufx+bufy*bufy;
-            if (r>10e-36)
-                potential[i] -= 1/4/PI*log(r)*src.ave_d;
+            if (r>10e-100)
+                potential -= 1.0/4.0/PI*log(r)*src.ave_d;
            // potential[i] = u;
-        }
+       // }
     }
     
                     
-    bool wellSeparated(const NodeInArray &trg, const NodeInArray &src){
-        double txmin,txmax,tymin,tymax;
+    bool wellSeparated(const double &x, const double &y, const NodeInArray &src){
+        //double txmin,txmax,tymin,tymax;
         double sxmin,sxmax,symin,symax;
-        txmin = trg.anchor_x;
+        /*txmin = trg.anchor_x;
         txmax = trg.anchor_x+trg.squareSide;
         tymin = trg.anchor_y;
         tymax = trg.anchor_y+trg.squareSide;
+        */
         sxmin = src.anchor_x-src.squareSide;
         sxmax = src.anchor_x+2*src.squareSide;
-        symin = src.anchor_y-src.squareSide;;
+        symin = src.anchor_y-src.squareSide;
         symax = src.anchor_y+2*src.squareSide;
         bool flagx, flagy;
-        flagx = (txmax>sxmin) && (txmin<sxmax);
-        flagy = (tymax>symin) && (tymin<symax);
+        flagx = (x>sxmin) && (x<sxmax);
+        flagy = (y>symin) && (y<symax);
         return ! (flagx && flagy);
     }
 
-    void evaluate(const NodeInArray &trg, const NodeInArray &src,//input
-            double *potential//output
+    void evaluate(const double &x, const double &y, const NodeInArray &src,//input
+            double &potential//output
             ) {
         //(4)
         //implement evaluate function based on tree
-        if (wellSeparated(trg,src)){
-            approximate(trg,src,potential);
+        if (wellSeparated(x,y,src)){
+            approximate(x,y,src,potential);
             return;
         }
         else{
             if (src.leaf==true){
-                direct(trg,src,potential);
+                if (src.pointNum > 0){ 
+                direct(x,y,src,potential);
+                }
                 return;
             }
             else{
                 for (int i=0;i<4;i++){
-                    evaluate(trg,tree[src.childrenIndex[i]],potential);
+                    evaluate(x,y,tree[src.childrenIndex[i]],potential);
                 }
             }
         }
     }
 
     void evaluateAll(){
-	vector<int> leaves;
-	int leaf;
-	//#pragma omp parallel for
-	for (int i=0;i<numOfNode;i++){
-		if (tree[i].leaf==true)
-			leaves.push_back(i);
-	}	
-	#pragma omp parallel for
-	for (int i=0;i<leaves.size();i++){
-		leaf = leaves[i];
-		if (tree[leaf].pointNum!=0){
-			double *nodepot = new double[tree[leaf].pointNum];
-			evaluate(tree[leaf],tree[0],nodepot);
-			for (int j=0;j<tree[leaf].pointNum; j++)
-				potential[tree[leaf].points_id[j]] = nodepot[j];
-			delete [] nodepot;
-		}
-	}	
+	    potential = new double[numOfPoint]; 
+        //#pragma omp parallel for
+        for (int i = 0;i<numOfPoint;i++){
+            potential[i] = 0.0;
+            evaluate(points_x[i], points_y[i], tree[0], potential[i]);
+            cerr<<"potential for id "<< i<<" is "<<potential[i]<<endl;;
+        }
+        
     }
 };
 
@@ -781,12 +825,13 @@ void testParscan(){
 
 
 int main(int argc, char* argv[])
-{   string file = "NBody_test.txt";
+{   string file = "bak.up";
     omp_set_num_threads(2);
     NBody* sol  = new NBody(file);
+    cout << "constructing!" << endl;
     sol->constructTree();
     cout<<"Successfully constructing a tree with "<<sol->numOfNode<<" nodes"<<endl;
-    //testParscan();
-    sol->insertAllPoints();
-    sol->average();
+    //sol->insertAllPoints();
+    //sol->average();
+    //sol->evaluateAll();
 }
