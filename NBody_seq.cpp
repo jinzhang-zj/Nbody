@@ -1,9 +1,6 @@
-//
+//  Collaborated project with Xinyang Yi, Kai Zhong.
 //  main.cpp
-//  test
 //
-//  Created by Xinyang Yi on 2/19/14.
-//  Copyright (c) 2014 Xinyang Yi. All rights reserved.
 //
 
 #include<stdio.h>
