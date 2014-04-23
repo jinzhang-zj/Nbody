@@ -1,10 +1,6 @@
-//  Collaborated project
+//  Collaborated project with Xinyang yi, Kai Zhong
 //  main.cpp
 //  implement a parallel alogrithm to solve N body problem 
-//
-//  Created by Xinyang Yi on 2/19/14.
-//  Copyright (c) 2014 Xinyang Yi. All rights reserved.
-//  Edited by Jin Zhang, Kai Zhong on 4/22/14.
 
 #include<stdio.h>
 #include<fstream>
